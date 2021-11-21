@@ -1,4 +1,5 @@
 import Data.Matrix hiding (trace)
+import Data.Set hiding (map, foldl, filter)
 import Data.Maybe
 import Data.Ix
 import Debug.Trace
@@ -33,21 +34,11 @@ computeSurrounding i j mat =
     else prev)
   0 (range ((-1, -1), (1, 1)))
 
--- combine results from the uncover algorithm together to get one result
-unionMats :: [GameMatrix] -> GameMatrix
-unionMats mats = matrix gridSize gridSize $ \(i, j) ->
-  Square {
-    uncovered = (or $ map (uncovered . getElem i j) mats),
-    bomb = bomb $ getElem i j $ head mats,
-    surrounding = foldl (\prev curr ->
-      if (isJust curr)
-        then curr
-        else prev
-    ) Nothing (map (surrounding . getElem i j) mats)
-  }
+isntUncoverable :: Square -> Bool
+isntUncoverable square = bomb square || uncovered square
 
-uncoverSquare :: Int -> Int -> GameMatrix -> GameMatrix
-uncoverSquare i j mat = do
+uncoverSquare :: Int -> Int -> GameMatrix -> Set (Int, Int) -> (GameMatrix, Set (Int, Int))
+uncoverSquare i j mat discovered = do
   let center = getElem i j mat
   let bomp = bomb center
   let new = setElem (Square {
@@ -55,9 +46,17 @@ uncoverSquare i j mat = do
     bomb = bomp,
     surrounding = if bomp then Nothing else Just $ computeSurrounding i j mat
   }) (i, j) mat
+  let newDiscover = trace (show i ++ " " ++ show j ++ " " ++ show discovered) $ insert (i, j) discovered
 
-  if ((||) bomp (uncovered center)) then new else unionMats $ map (\(x, y) -> uncoverSquare (i+x) (j+y) new)
-    $ trace (show i ++ " " ++ show j ++ show (uncovered center) ++ show (safeGet i+1 j+1 new)) (filter (\(x, y) -> isJust $ safeGet (i+x) (j+y) new) corners)
+  if (isntUncoverable center) then (new, empty) else trace ("") $ (fst $ foldl (\(pmat, pset) (x, y) -> uncoverSquare (i+x) (j+y) pmat pset)
+    (new, newDiscover)
+    (filter (\(x, y) ->
+      and [
+        (not $ uncovered center),
+        (isJust $ safeGet (i+x) (j+y) new),
+        (not $ member (i+x, j+y) newDiscover)
+      ])
+    corners), empty)
 
 main :: IO ()
 main = putStrLn "shart"
